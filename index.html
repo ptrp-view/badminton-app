@@ -1,17 +1,42 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8">
-  <title>ก๊วนแบด</title>
+  <meta charset="UTF-8" />
+  <title>Badminton Group</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- LIFF SDK -->
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-<h2>🏸 ก๊วนแบดวันนี้</h2>
-<button id="loginBtn">Login ด้วย LINE</button>
-<button id="joinBtn" style="display:none;">เข้าร่วมก๊วน</button>
+<div class="app">
 
-<p id="status"></p>
+  <header>
+    <h2>🏸 ก๊วนแบดวันนี้</h2>
+  </header>
+
+  <section id="profile" class="profile hidden">
+    <img id="avatar" />
+    <p id="username"></p>
+  </section>
+
+  <section class="action">
+    <button id="loginBtn">Login ด้วย LINE</button>
+    <button id="joinBtn" class="hidden">เข้าร่วมก๊วน</button>
+    <button id="leaveBtn" class="hidden cancel">ยกเลิก</button>
+  </section>
+
+  <section class="members">
+    <h3>👥 คนที่เข้าร่วม</h3>
+    <ul id="memberList"></ul>
+  </section>
+
+  <p id="status" class="status"></p>
+
+</div>
 
 <script src="app.js"></script>
 </body>
