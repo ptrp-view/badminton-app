@@ -41,3 +41,672 @@
 <script src="app.js"></script>
 </body>
 </html>
+
+<!doctype html>
+<html lang="th" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Badminton Squad Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js';
+    import { getDatabase, ref, set, get, onValue, push, update, remove } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCatfcF04Js_lTFQheuuUwyMNsRM25jDs4",
+      authDomain: "badminton-group-c945f.firebaseapp.com",
+      projectId: "badminton-group-c945f",
+      storageBucket: "badminton-group-c945f.firebasestorage.app",
+      messagingSenderId: "549139272671",
+      appId: "1:549139272671:web:c0723dad8b491c7546aa6a",
+      measurementId: "G-3XF1790ZYV",
+      databaseURL: "https://badminton-group-c945f-default-rtdb.asia-southeast1.firebasedatabase.app"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const LIFF_ID = "2009035097-yQ2lNE9u";
+
+    const defaultConfig = {
+      app_title: "🏸 ก๊วน     บดมินตัน",
+      primary_color: "#10b981",
+      secondary_color: "#1f2937",
+      text_color: "#ffffff",
+      accent_color: "#f59e0b",
+      bg_color: "#111827"
+    };
+
+    let config = { ...defaultConfig };
+    let currentUser = null;
+    let currentPage = 'home';
+    let checkedInPlayers = [];
+    let currentMatches = [];
+
+    const levelNames = {
+      1: "🍼 เบบี้",
+      2: "📚 มอต้น",
+      3: "🎓 มอปลาย",
+      4: "🏛️ มหาลัย"
+    };
+
+    const levelColors = {
+      1: "#ec4899",
+      2: "#3b82f6",
+      3: "#8b5cf6",
+      4: "#f59e0b"
+    };
+
+    async function initLiff() {
+      try {
+        await liff.init({ liffId: LIFF_ID });
+        if (liff.isLoggedIn()) {
+          const profile = await liff.getProfile();
+          currentUser = {
+            odId: profile.odId,
+            name: profile.displayName,
+            picture: profile.pictureUrl || 'https://via.placeholder.com/100',
+            nickname: profile.displayName,
+            level: 1,
+            wins: 0,
+            losses: 0,
+            draws: 0
+          };
+          await loadUserProfile();
+          setTimeout(() => {
+            renderApp();
+          }, 500);
+        } else {
+          renderLoginScreen();
+        }
+      } catch (err) {
+        console.error('LIFF init error:', err);
+        renderLoginScreen();
+      }
+    }
+
+    async function loadUserProfile() {
+      if (!currentUser) return;
+      const userRef = ref(db, `users/${currentUser.odId}`);
+      const snapshot = await get(userRef);
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        currentUser = { ...currentUser, ...data };
+      }
+    }
+
+    async function saveUserProfile(data) {
+      if (!currentUser) return;
+      const userRef = ref(db, `users/${currentUser.odId}`);
+      await update(userRef, data);
+      currentUser = { ...currentUser, ...data };
+    }
+
+    function renderLoginScreen() {
+      const appContainer = document.getElementById('app');
+      appContainer.innerHTML = `
+        <div class="min-h-full flex flex-col items-center justify-center p-8" style="background: linear-gradient(135deg, ${config.bg_color} 0%, ${config.secondary_color} 100%);">
+          <div class="text-center">
+            <div class="text-8xl mb-6">🏸</div>
+            <h1 class="text-4xl font-bold mb-4" style="color: ${config.primary_color};">${config.app_title}</h1>
+            <p class="text-xl mb-8" style="color: ${config.text_color}; opacity: 0.8;">จัดก๊วนแบดมินตันอย่างมืออาชีพ</p>
+            <button onclick="window.handleLogin()" class="px-8 py-4 rounded-2xl text-xl font-bold transition-all transform hover:scale-105 shadow-lg" style="background: linear-gradient(135deg, #00c300 0%, #00b900 100%); color: white;">
+              <span class="flex items-center gap-3">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+                  <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63.346 0 .628.285.628.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>
+                </svg>
+                เข้าสู่ระบบด้วย LINE
+              </span>
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    window.handleLogin = function() {
+      if (!liff.isLoggedIn()) {
+        liff.login();
+      }
+    };
+
+    function renderApp() {
+      const appContainer = document.getElementById('app');
+      appContainer.innerHTML = `
+        <div class="min-h-full flex flex-col" style="background: ${config.bg_color};">
+          <header class="p-4 flex items-center justify-between" style="background: ${config.secondary_color};">
+            <h1 class="text-xl font-bold" style="color: ${config.primary_color};" id="app-title">${config.app_title}</h1>
+            <div class="flex items-center gap-2">
+              <img src="${currentUser?.picture || ''}" class="w-8 h-8 rounded-full border-2" style="border-color: ${config.primary_color};" onerror="this.src='https://via.placeholder.com/32'">
+            </div>
+          </header>
+          
+          <main class="flex-1 overflow-auto p-4" id="main-content">
+          </main>
+          
+          <nav class="grid grid-cols-3 gap-1 p-2" style="background: ${config.secondary_color};">
+            <button onclick="window.navigateTo('home')" class="nav-btn flex flex-col items-center py-3 rounded-xl transition-all" data-page="home">
+              <span class="text-2xl">🏠</span>
+              <span class="text-xs mt-1">หน้าหลัก</span>
+            </button>
+            <button onclick="window.navigateTo('ranking')" class="nav-btn flex flex-col items-center py-3 rounded-xl transition-all" data-page="ranking">
+              <span class="text-2xl">🏆</span>
+              <span class="text-xs mt-1">ระดับ</span>
+            </button>
+            <button onclick="window.navigateTo('profile')" class="nav-btn flex flex-col items-center py-3 rounded-xl transition-all" data-page="profile">
+              <span class="text-2xl">👤</span>
+              <span class="text-xs mt-1">โปรไฟล์</span>
+            </button>
+          </nav>
+        </div>
+      `;
+      updateNavStyles();
+      renderPageContent();
+      setupRealtimeListeners();
+    }
+
+    function updateNavStyles() {
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        const page = btn.dataset.page;
+        if (page === currentPage) {
+          btn.style.background = config.primary_color;
+          btn.style.color = config.text_color;
+        } else {
+          btn.style.background = 'transparent';
+          btn.style.color = config.text_color;
+          btn.style.opacity = '0.7';
+        }
+      });
+    }
+
+    window.navigateTo = function(page) {
+      currentPage = page;
+      updateNavStyles();
+      setTimeout(() => {
+        renderPageContent();
+      }, 50);
+    };
+
+    function setupRealtimeListeners() {
+      const today = new Date().toISOString().split('T')[0];
+      
+      const checkinsRef = ref(db, `checkins/${today}`);
+      onValue(checkinsRef, (snapshot) => {
+        checkedInPlayers = [];
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          checkedInPlayers = Object.values(data);
+        }
+        if (currentPage === 'home') {
+          renderPageContent();
+        }
+      });
+
+      const matchesRef = ref(db, `matches/${today}`);
+      onValue(matchesRef, (snapshot) => {
+        currentMatches = [];
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          currentMatches = Object.entries(data).map(([id, match]) => ({ id, ...match }));
+        }
+        if (currentPage === 'home') {
+          renderPageContent();
+        }
+      });
+    }
+
+    function renderPageContent() {
+      const mainContent = document.getElementById('main-content');
+      if (!mainContent) return;
+
+      switch (currentPage) {
+        case 'home':
+          renderHomePage(mainContent);
+          break;
+        case 'ranking':
+          renderRankingPage(mainContent);
+          break;
+        case 'profile':
+          renderProfilePage(mainContent);
+          break;
+      }
+    }
+
+    function renderHomePage(container) {
+      const isCheckedIn = checkedInPlayers.some(p => p.odId === currentUser?.odId);
+      
+      container.innerHTML = `
+        <div class="space-y-6">
+          <!-- Check-in Card -->
+          <div class="rounded-2xl p-6 shadow-xl" style="background: linear-gradient(135deg, ${config.secondary_color} 0%, #374151 100%);">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-xl font-bold" style="color: ${config.text_color};">📍 เช็คอินวันนี้</h2>
+              <span class="px-3 py-1 rounded-full text-sm font-bold" style="background: ${config.primary_color}; color: ${config.text_color};">
+                ${checkedInPlayers.length} คน
+              </span>
+            </div>
+            
+            <button onclick="window.handleCheckin()" class="w-full py-4 rounded-xl text-lg font-bold transition-all transform hover:scale-105 ${isCheckedIn ? 'opacity-50' : ''}" 
+              style="background: ${isCheckedIn ? '#6b7280' : config.primary_color}; color: ${config.text_color};"
+              ${isCheckedIn ? 'disabled' : ''}>
+              ${isCheckedIn ? '✅ เช็คอินแล้ว' : '🏸 เช็คอิน'}
+            </button>
+            
+            <!-- Checked-in Players -->
+            <div class="mt-4 grid grid-cols-4 gap-2">
+              ${checkedInPlayers.map(p => `
+                <div class="flex flex-col items-center p-2 rounded-xl" style="background: rgba(255,255,255,0.1);">
+                  <img src="${p.picture || ''}" class="w-10 h-10 rounded-full border-2" style="border-color: ${levelColors[p.level] || config.primary_color};" onerror="this.src='https://via.placeholder.com/40'">
+                  <span class="text-xs mt-1 truncate w-full text-center" style="color: ${config.text_color};">${p.nickname || p.name?.substring(0, 5) || 'ผู้เล่น'}</span>
+                  <span class="text-xs" style="color: ${levelColors[p.level] || config.text_color};">${levelNames[p.level] || 'ไม่ระบุ'}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Match Generation -->
+          <div class="rounded-2xl p-6 shadow-xl" style="background: linear-gradient(135deg, ${config.secondary_color} 0%, #374151 100%);">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-xl font-bold" style="color: ${config.text_color};">🎯 จับคู่แมต  ์</h2>
+              <button onclick="window.generateMatches()" class="px-4 py-2 rounded-xl text-sm font-bold transition-all" style="background: ${config.accent_color}; color: ${config.secondary_color};">
+                🔀 สุ่มแมตช์
+              </button>
+            </div>
+            
+            <div class="space-y-3" id="matches-container">
+              ${currentMatches.length === 0 ? `
+                <div class="text-center py-8" style="color: ${config.text_color}; opacity: 0.5;">
+                  <div class="text-4xl mb-2">🏸</div>
+                  <p>ยังไม่มีแมตช์</p>
+                  <p class="text-sm">กดปุ่มสุ่มแมตช์เพื่อเริ่มต้น</p>
+                </div>
+              ` : currentMatches.map((match, idx) => `
+                <div class="rounded-xl p-4" style="background: rgba(255,255,255,0.1); border-left: 4px solid ${levelColors[match.level] || config.primary_color};">
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="font-bold" style="color: ${config.primary_color};">🏟️ สนาม ${idx + 1}</span>
+                    <span class="text-sm px-2 py-1 rounded-full" style="background: ${levelColors[match.level]}; color: white;">${levelNames[match.level]}</span>
+                  </div>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div class="text-center">
+                      <div class="text-sm mb-1" style="color: ${config.text_color}; opacity: 0.7;">ทีม A</div>
+                      <div class="space-y-1">
+                        ${match.teamA.map(p => `
+                          <div class="flex items-center gap-2 justify-center">
+                            <img src="${p.picture || ''}" class="w-6 h-6 rounded-full" onerror="this.src='https://via.placeholder.com/24'">
+                            <span class="text-sm" style="color: ${config.text_color};">${p.nickname || p.name?.substring(0, 8) || 'ผู้เล่น'}</span>
+                          </div>
+                        `).join('')}
+                      </div>
+                    </div>
+                    <div class="text-center">
+                      <div class="text-sm mb-1" style="color: ${config.text_color}; opacity: 0.7;">ทีม B</div>
+                      <div class="space-y-1">
+                        ${match.teamB.map(p => `
+                          <div class="flex items-center gap-2 justify-center">
+                            <img src="${p.picture || ''}" class="w-6 h-6 rounded-full" onerror="this.src='https://via.placeholder.com/24'">
+                            <span class="text-sm" style="color: ${config.text_color};">${p.nickname || p.name?.substring(0, 8) || 'ผู้เล่น'}</span>
+                          </div>
+                        `).join('')}
+                      </div>
+                    </div>
+                  </div>
+                  <div class="mt-3 flex gap-2 justify-center">
+                    <button onclick="window.recordResult('${match.id}', 'A')" class="px-3 py-1 rounded-lg text-sm font-bold" style="background: ${config.primary_color}; color: white;">ทีม A ชนะ</button>
+                    <button onclick="window.recordResult('${match.id}', 'draw')" class="px-3 py-1 rounded-lg text-sm font-bold" style="background: #6b7280; color: white;">เสมอ</button>
+                    <button onclick="window.recordResult('${match.id}', 'B')" class="px-3 py-1 rounded-lg text-sm font-bold" style="background: ${config.accent_color}; color: white;">ทีม B ชนะ</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    window.handleCheckin = async function() {
+      if (!currentUser) return;
+      
+      const today = new Date().toISOString().split('T')[0];
+      const checkinRef = ref(db, `checkins/${today}/${currentUser.odId}`);
+      
+      await set(checkinRef, {
+        odId: currentUser.odId,
+        name: currentUser.name,
+        nickname: currentUser.nickname || currentUser.name,
+        picture: currentUser.picture,
+        level: currentUser.level || 1,
+        checkedInAt: Date.now()
+      });
+    };
+
+    window.generateMatches = async function() {
+      if (checkedInPlayers.length < 4) {
+        showToast('ต้องมีผู้เล่นอย่างน้อย 4 คนถึงจะสุ่มแมตช์  ด้');
+        return;
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      const matchesRef = ref(db, `matches/${today}`);
+      
+      await remove(matchesRef);
+
+      const playersByLevel = {};
+      checkedInPlayers.forEach(p => {
+        const level = p.level || 1;
+        if (!playersByLevel[level]) playersByLevel[level] = [];
+        playersByLevel[level].push(p);
+      });
+
+      const newMatches = [];
+      
+      Object.keys(playersByLevel).forEach(level => {
+        const players = [...playersByLevel[level]];
+        shuffleArray(players);
+        
+        while (players.length >= 4) {
+          const matchPlayers = players.splice(0, 4);
+          newMatches.push({
+            level: parseInt(level),
+            teamA: [matchPlayers[0], matchPlayers[1]],
+            teamB: [matchPlayers[2], matchPlayers[3]],
+            status: 'pending',
+            createdAt: Date.now()
+          });
+        }
+      });
+
+      const remainingPlayers = [];
+      Object.values(playersByLevel).forEach(players => {
+        remainingPlayers.push(...players);
+      });
+      
+      shuffleArray(remainingPlayers);
+      while (remainingPlayers.length >= 4) {
+        const matchPlayers = remainingPlayers.splice(0, 4);
+        newMatches.push({
+          level: 0,
+          teamA: [matchPlayers[0], matchPlayers[1]],
+          teamB: [matchPlayers[2], matchPlayers[3]],
+          status: 'pending',
+          createdAt: Date.now()
+        });
+      }
+
+      for (const match of newMatches) {
+        await push(matchesRef, match);
+      }
+
+      showToast(`สร้าง ${newMatches.length} แมตช์แล้ว!`);
+    };
+
+    window.recordResult = async function(matchId, winner) {
+      const today = new Date().toISOString().split('T')[0];
+      const match = currentMatches.find(m => m.id === matchId);
+      if (!match) return;
+
+      const matchRef = ref(db, `matches/${today}/${matchId}`);
+      await update(matchRef, { status: 'completed', winner });
+
+      const allPlayers = [...match.teamA, ...match.teamB];
+      for (const player of allPlayers) {
+        const userRef = ref(db, `users/${player.odId}`);
+        const snapshot = await get(userRef);
+        const userData = snapshot.exists() ? snapshot.val() : { wins: 0, losses: 0, draws: 0 };
+        
+        let updateData = {};
+        if (winner === 'draw') {
+          updateData.draws = (userData.draws || 0) + 1;
+        } else {
+          const isTeamA = match.teamA.some(p => p.odId === player.odId);
+          const playerWon = (winner === 'A' && isTeamA) || (winner === 'B' && !isTeamA);
+          
+          if (playerWon) {
+            updateData.wins = (userData.wins || 0) + 1;
+          } else {
+            updateData.losses = (userData.losses || 0) + 1;
+          }
+        }
+        
+        await update(userRef, updateData);
+      }
+
+      showToast('บันทึกผลแมตช์แล้ว!');
+    };
+
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+
+    function renderRankingPage(container) {
+      container.innerHTML = `
+        <div class="space-y-6">
+          <div class="rounded-2xl p-6 shadow-xl" style="background: linear-gradient(135deg, ${config.secondary_color} 0%, #374151 100%);">
+            <h2 class="text-xl font-bold mb-4" style="color: ${config.text_color};">🎯 ตั้งค่าระดับของคุณ</h2>
+            
+            <div class="mb-4">
+              <label class="block text-sm mb-2" style="color: ${config.text_color}; opacity: 0.8;">ชื่อเล่น</label>
+              <input type="text" id="nickname-input" value="${currentUser?.nickname || currentUser?.name || ''}" 
+                class="w-full px-4 py-3 rounded-xl text-lg" 
+                style="background: rgba(255,255,255,0.1); color: ${config.text_color}; border: 2px solid ${config.primary_color};"
+                placeholder="ใส่ชื่อเล่นของคุณ">
+            </div>
+            
+            <div class="mb-4">
+              <label class="block text-sm mb-2" style="color: ${config.text_color}; opacity: 0.8;">   ลือกระดับ</label>
+              <div class="grid grid-cols-2 gap-3">
+                ${Object.entries(levelNames).map(([level, name]) => `
+                  <button onclick="window.selectLevel(${level})" class="level-btn p-4 rounded-xl text-center transition-all transform hover:scale-105 ${currentUser?.level == level ? 'ring-4' : ''}" 
+                    data-level="${level}"
+                    style="background: ${levelColors[level]}; color: white; ${currentUser?.level == level ? `ring-color: white;` : ''}">
+                    <div class="text-2xl mb-1">${name.split(' ')[0]}</div>
+                    <div class="text-sm font-bold">${name.split(' ')[1]}</div>
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+            
+            <button onclick="window.saveRankingSettings()" class="w-full py-4 rounded-xl text-lg font-bold transition-all transform hover:scale-105" style="background: ${config.primary_color}; color: ${config.text_color};">
+              💾 บันทึก
+            </button>
+          </div>
+          
+          <div class="rounded-2xl p-6 shadow-xl" style="background: linear-gradient(135deg, ${config.secondary_color} 0%, #374151 100%);">
+            <h2 class="text-xl font-bold mb-4" style="color: ${config.text_color};">📊 ระดับทั้งหมด</h2>
+            <div class="space-y-3">
+              ${Object.entries(levelNames).map(([level, name]) => `
+                <div class="flex items-center gap-3 p-3 rounded-xl" style="background: rgba(255,255,255,0.05);">
+                  <div class="w-12 h-12 rounded-full flex items-center justify-center text-2xl" style="background: ${levelColors[level]};">
+                    ${name.split(' ')[0]}
+                  </div>
+                  <div>
+                    <div class="font-bold" style="color: ${config.text_color};">${name}</div>
+                    <div class="text-sm" style="color: ${config.text_color}; opacity: 0.6;">ระดับ ${level}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    let selectedLevel = currentUser?.level || 1;
+
+    window.selectLevel = function(level) {
+      selectedLevel = level;
+      document.querySelectorAll('.level-btn').forEach(btn => {
+        const btnLevel = parseInt(btn.dataset.level);
+        if (btnLevel === level) {
+          btn.classList.add('ring-4');
+        } else {
+          btn.classList.remove('ring-4');
+        }
+      });
+    };
+
+    window.saveRankingSettings = async function() {
+      const nickname = document.getElementById('nickname-input')?.value || currentUser?.name;
+      
+      await saveUserProfile({
+        nickname,
+        level: selectedLevel
+      });
+      
+      showToast('บันทึกการตั้งค่าแล้ว!');
+      renderPageContent();
+    };
+
+    function renderProfilePage(container) {
+      const wins = currentUser?.wins || 0;
+      const losses = currentUser?.losses || 0;
+      const draws = currentUser?.draws || 0;
+      const total = wins + losses + draws;
+      const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
+
+      container.innerHTML = `
+        <div class="space-y-6">
+          <!-- Profile Card -->
+          <div class="rounded-2xl p-6 shadow-xl text-center" style="background: linear-gradient(135deg, ${config.secondary_color} 0%, #374151 100%);">
+            <div class="relative inline-block mb-4">
+              <img src="${currentUser?.picture || ''}" class="w-24 h-24 rounded-full border-4" style="border-color: ${config.primary_color};" onerror="this.src='https://via.placeholder.com/96'">
+              <div class="absolute -bottom-2 -right-2 w-10 h-10 rounded-full flex items-center justify-center text-lg" style="background: ${levelColors[currentUser?.level] || config.primary_color};">
+                ${levelNames[currentUser?.level]?.split(' ')[0] || '❓'}
+              </div>
+            </div>
+            <h2 class="text-2xl font-bold" style="color: ${config.text_color};">${currentUser?.nickname || currentUser?.name || 'ผู้เล่น'}</h2>
+            <p class="text-sm mt-1" style="color: ${config.text_color}; opacity: 0.7;">${currentUser?.name || ''}</p>
+            <div class="mt-2 inline-block px-4 py-1 rounded-full" style="background: ${levelColors[currentUser?.level] || config.primary_color}; color: white;">
+              ${levelNames[currentUser?.level] || 'ยังไม่ได้ระบุระดับ'}
+            </div>
+          </div>
+
+          <!-- Stats Card -->
+          <div class="rounded-2xl p-6 shadow-xl" style="background: linear-gradient(135deg, ${config.secondary_color} 0%, #374151 100%);">
+            <h3 class="text-xl font-bold mb-4" style="color: ${config.text_color};">📈 สถิติการเล่น</h3>
+            
+            <div class="grid grid-cols-3 gap-3 mb-6">
+              <div class="text-center p-4 rounded-xl" style="background: rgba(16, 185, 129, 0.2);">
+                <div class="text-3xl font-bold" style="color: #10b981;">${wins}</div>
+                <div class="text-sm" style="color: ${config.text_color};">ชนะ</div>
+              </div>
+              <div class="text-center p-4 rounded-xl" style="background: rgba(239, 68, 68, 0.2);">
+                <div class="text-3xl font-bold" style="color: #ef4444;">${losses}</div>
+                <div class="text-sm" style="color: ${config.text_color};">แพ้</div>
+              </div>
+              <div class="text-center p-4 rounded-xl" style="background: rgba(107, 114, 128, 0.2);">
+                <div class="text-3xl font-bold" style="color: #6b7280;">${draws}</div>
+                <div class="text-sm" style="color: ${config.text_color};">เสมอ</div>
+              </div>
+            </div>
+
+            <div class="mb-2 flex justify-between" style="color: ${config.text_color};">
+              <span>อัตราชนะ</span>
+              <span class="font-bold">${winRate}%</span>
+            </div>
+            <div class="h-4 rounded-full overflow-hidden" style="background: rgba(255,255,255,0.1);">
+              <div class="h-full rounded-full transition-all" style="width: ${winRate}%; background: linear-gradient(90deg, ${config.primary_color}, ${config.accent_color});"></div>
+            </div>
+            
+            <div class="mt-4 text-center" style="color: ${config.text_color}; opacity: 0.7;">
+              เล่นทั้งหมด ${total} แมตช์
+            </div>
+          </div>
+
+          <!-- Logout Button -->
+          <button onclick="window.handleLogout()" class="w-full py-4 rounded-xl text-lg font-bold transition-all" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 2px solid #ef4444;">
+            🚪 ออ  จากระบบ
+          </button>
+        </div>
+      `;
+    }
+
+    window.handleLogout = function() {
+      if (liff.isLoggedIn()) {
+        liff.logout();
+        window.location.reload();
+      }
+    };
+
+    function showToast(message) {
+      const existingToast = document.querySelector('.toast-message');
+      if (existingToast) existingToast.remove();
+
+      const toast = document.createElement('div');
+      toast.className = 'toast-message fixed top-20 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-xl shadow-xl z-50 transition-all';
+      toast.style.background = config.primary_color;
+      toast.style.color = config.text_color;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      }, 2500);
+    }
+
+    async function onConfigChange(newConfig) {
+      config = { ...config, ...newConfig };
+      const titleEl = document.getElementById('app-title');
+      if (titleEl) titleEl.textContent = config.app_title;
+    }
+
+    if (window.elementSdk) {
+      window.elementSdk.init({
+        defaultConfig,
+        onConfigChange,
+        mapToCapabilities: (cfg) => ({
+          recolorables: [
+            { get: () => cfg.primary_color || defaultConfig.primary_color, set: (v) => { cfg.primary_color = v; window.elementSdk.setConfig({ primary_color: v }); }},
+            { get: () => cfg.secondary_color || defaultConfig.secondary_color, set: (v) => { cfg.secondary_color = v; window.elementSdk.setConfig({ secondary_color: v }); }},
+            { get: () => cfg.text_color || defaultConfig.text_color, set: (v) => { cfg.text_color = v; window.elementSdk.setConfig({ text_color: v }); }},
+            { get: () => cfg.accent_color || defaultConfig.accent_color, set: (v) => { cfg.accent_color = v; window.elementSdk.setConfig({ accent_color: v }); }},
+            { get: () => cfg.bg_color || defaultConfig.bg_color, set: (v) => { cfg.bg_color = v; window.elementSdk.setConfig({ bg_color: v }); }}
+          ],
+          borderables: [],
+          fontEditable: undefined,
+          fontSizeable: undefined
+        }),
+        mapToEditPanelValues: (cfg) => new Map([
+          ["app_title", cfg.app_title || defaultConfig.app_title]
+        ])
+      });
+    }
+
+    initLiff();
+  </script>
+  <style>
+    body {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    html, body, #app {
+      height: 100%;
+      width: 100%;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(255,255,255,0.1);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #10b981;
+      border-radius: 3px;
+    }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+  <script src="/_sdk/data_sdk.js" type="text/javascript"></script>
+ </head>
+ <body class="h-full w-full overflow-hidden">
+  <div id="app" class="h-full w-full overflow-auto"></div>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9c803f62307ea1c0',t:'MTc3MDEwNDA4NS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
